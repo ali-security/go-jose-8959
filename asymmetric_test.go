@@ -22,6 +22,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"errors"
+	"gopkg.in/go-jose/go-jose.v2/json"
 	"io"
 	"testing"
 )
@@ -163,21 +164,33 @@ func TestInvalidECDecrypt(t *testing.T) {
 
 	generator := randomKeyGenerator{size: 16}
 
+	recipient := recipientInfo{
+		// decryptKey will error out before the contents here matter
+		encryptedKey: []byte("not used"),
+	}
 	// Missing epk header
 	headers := rawHeader{}
+
 	headers.set(headerAlgorithm, ECDH_ES)
 
-	_, err := dec.decryptKey(headers, nil, generator)
+	want := "go-jose/go-jose: missing epk header"
+	_, err := dec.decryptKey(headers, &recipient, generator)
 	if err == nil {
 		t.Error("ec decrypter accepted object with missing epk header")
+	} else if err.Error() != want {
+		t.Errorf("decryptKey with missing epk header: got %q, want %q", err, want)
 	}
 
 	// Invalid epk header
-	headers.set(headerEPK, &JSONWebKey{})
+	invalid := json.RawMessage("invalid")
+	headers["epk"] = &invalid
 
-	_, err = dec.decryptKey(headers, nil, generator)
+	want = "go-jose/go-jose: invalid epk header"
+	_, err = dec.decryptKey(headers, &recipient, generator)
 	if err == nil {
 		t.Error("ec decrypter accepted object with invalid epk header")
+	} else if err.Error() != want {
+		t.Errorf("decryptKey with invalid epk header: got %q, want %q", err, want)
 	}
 }
 

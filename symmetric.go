@@ -346,11 +346,23 @@ func (ctx *symmetricKeyCipher) encryptKey(cek []byte, alg KeyAlgorithm) (recipie
 
 // Decrypt the content encryption key.
 func (ctx *symmetricKeyCipher) decryptKey(headers rawHeader, recipient *recipientInfo, generator keyGenerator) ([]byte, error) {
-	switch headers.getAlgorithm() {
-	case DIRECT:
+	if recipient == nil {
+		return nil, fmt.Errorf("go-jose/go-jose: missing recipient")
+	}
+
+	alg := headers.getAlgorithm()
+	if alg == DIRECT {
 		cek := make([]byte, len(ctx.key))
 		copy(cek, ctx.key)
 		return cek, nil
+	}
+
+	encryptedKey := recipient.encryptedKey
+	if len(encryptedKey) == 0 {
+		return nil, fmt.Errorf("go-jose/go-jose: missing JWE Encrypted Key")
+	}
+
+	switch alg {
 	case A128GCMKW, A192GCMKW, A256GCMKW:
 		aead := newAESGCM(len(ctx.key))
 
@@ -365,7 +377,7 @@ func (ctx *symmetricKeyCipher) decryptKey(headers rawHeader, recipient *recipien
 
 		parts := &aeadParts{
 			iv:         iv.bytes(),
-			ciphertext: recipient.encryptedKey,
+			ciphertext: encryptedKey,
 			tag:        tag.bytes(),
 		}
 
@@ -381,7 +393,7 @@ func (ctx *symmetricKeyCipher) decryptKey(headers rawHeader, recipient *recipien
 			return nil, err
 		}
 
-		cek, err := josecipher.KeyUnwrap(block, recipient.encryptedKey)
+		cek, err := josecipher.KeyUnwrap(block, encryptedKey)
 		if err != nil {
 			return nil, err
 		}
@@ -422,7 +434,7 @@ func (ctx *symmetricKeyCipher) decryptKey(headers rawHeader, recipient *recipien
 			return nil, err
 		}
 
-		cek, err := josecipher.KeyUnwrap(block, recipient.encryptedKey)
+		cek, err := josecipher.KeyUnwrap(block, encryptedKey)
 		if err != nil {
 			return nil, err
 		}
